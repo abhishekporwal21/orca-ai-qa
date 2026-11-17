@@ -23,7 +23,10 @@ services:
       - key: OPENAI_BASE_URL
         value: https://api.openai.com/v1
       - key: CORS_ORIGIN
-        value: https://orca-ai-web-qa.onrender.com
+        fromService:
+          name: orca-ai-web-qa
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
       - key: JWT_SECRET
         generateValue: true
 
@@ -40,7 +43,10 @@ services:
       - key: NODE_ENV
         value: production
       - key: NEXT_PUBLIC_API_URL
-        value: https://orca-ai-api-qa.onrender.com
+        fromService:
+          name: orca-ai-api-qa
+          type: web
+          envVarKey: RENDER_EXTERNAL_URL
 
 databases:
   - name: orca-ai-qa-db
