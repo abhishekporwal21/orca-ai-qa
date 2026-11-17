@@ -1,13 +1,19 @@
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
 model User {
-  id           String         @id @default(cuid())
-  email        String         @unique
-  name         String?
-  passwordHash String
-  role         String         @default("USER")
-  createdAt    DateTime       @default(now())
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  passwordHash  String
+  role          String         @default("USER")
+  createdAt     DateTime       @default(now())
   conversations Conversation[]
 }
 
@@ -20,6 +26,7 @@ model Conversation {
   messages  Message[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
   @@index([userId, updatedAt])
 }
 
@@ -30,5 +37,6 @@ model Message {
   role           String
   content        String       @db.Text
   createdAt      DateTime     @default(now())
+
   @@index([conversationId, createdAt])
 }
