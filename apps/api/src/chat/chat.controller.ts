@@ -11,6 +11,7 @@ function qaUserId(header?: string) {
 @Controller('api/chat')
 export class ChatController {
   constructor(private readonly chat: ChatService) {}
+  @Get('models') models() { return this.chat.getModelStatus(); }
   @Get('conversations') list(@Headers('x-qa-user') user?: string) { return this.chat.listConversations(qaUserId(user)); }
   @Get('conversations/:id') get(@Param('id') id: string, @Headers('x-qa-user') user?: string) { return this.chat.getConversation(qaUserId(user), id); }
   @Post('messages') send(@Body() dto: SendMessageDto, @Headers('x-qa-user') user?: string) { return this.chat.send(qaUserId(user), dto); }
