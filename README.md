@@ -1,76 +1,85 @@
 # ORCA AI — QA starter platform
 
-A runnable foundation for an AI SaaS product: Next.js chat UI, NestJS API, PostgreSQL/Prisma persistence, and an OpenAI-compatible chat provider.
+A QA foundation for an independently operated AI platform: Next.js chat UI, NestJS API, PostgreSQL/Prisma persistence, and an ORCA model gateway that connects to a self-hosted open-weight language model.
 
-> This is the first runnable QA release, not yet a production-complete ChatGPT replacement. Authentication, billing, streaming, document ingestion/RAG, agents, workflow execution, and enterprise tenancy are planned modules. The current `x-qa-user` identity is deliberately QA-only and must not be exposed publicly.
+> This release removes the OpenAI SDK and OpenAI API dependency. The chat API now sends inference requests directly from the backend to an ORCA-controlled model server. A dedicated GPU inference server must be deployed and configured before chat responses can be generated.
+
+## Architecture
+
+- **Web:** Next.js chat application.
+- **API:** NestJS REST API and model gateway.
+- **Inference:** Self-hosted open-weight model served by vLLM (recommended) or another server exposing the compatible `/chat/completions` HTTP contract.
+- **Model starting point:** Qwen3-8B (configurable using `ORCA_MODEL_NAME`).
+- **Data:** PostgreSQL and Prisma.
+- **Secrets:** Model gateway credentials remain on the backend; never expose them as `NEXT_PUBLIC_*` variables.
+
+The model gateway uses a compatible request/response format, but it does not call OpenAI. The inference URL must point to infrastructure controlled by ORCA.
 
 ## Prerequisites
+
 - Node.js 20 or newer
 - npm 10 or newer
-- Docker Desktop / Docker Engine
-- An OpenAI API key for live AI responses
+- Docker Desktop / Docker Engine for local PostgreSQL
+- A self-hosted inference server with a compatible chat-completions endpoint
+- A GPU host sized for the selected model and its context length
 
 ## Run locally / QA
 
 1. Copy `.env.example` to `.env` in the repository root.
-2. Set `OPENAI_API_KEY` in `.env`. Keep it secret; do not put it in frontend variables.
-3. Start PostgreSQL:
+2. Start PostgreSQL:
    ```bash
    docker compose up -d postgres
    ```
-4. Install dependencies:
+3. Install dependencies:
    ```bash
    npm install
    ```
-5. Generate Prisma client and apply schema:
+4. Generate Prisma client and apply schema:
    ```bash
    npm run db:generate
    npm run db:migrate -- --name init
    ```
-   If your shell does not pass the migration name correctly, run `npm --workspace apps/api exec prisma migrate dev -- --name init`.
-6. Start both apps:
+5. Start both applications:
    ```bash
    npm run dev
    ```
-7. Open the web app at http://localhost:3000. API health check: http://localhost:4000/health.
+6. Open the web app at http://localhost:3000. API health check: http://localhost:4000/health.
 
-## QA smoke test
-1. Open http://localhost:4000/health and confirm `status: ok`.
-2. Open http://localhost:3000.
-3. Send `Say hello and identify yourself as ORCA AI`.
-4. Confirm the assistant response appears and the conversation is listed in the left sidebar.
-5. Refresh the browser, reopen the conversation, and confirm message history is persisted.
+Without a configured self-hosted model server, the web application and API health endpoint can run, but chat returns a clear model-engine-not-configured response.
 
-## Environment variables
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_SECRET` | Reserved for the authentication module; use a strong random value |
-| `OPENAI_API_KEY` | Server-side model provider key |
-| `OPENAI_BASE_URL` | Optional OpenAI-compatible endpoint |
-| `OPENAI_CHAT_MODEL` | Default model setting (model allowlist currently controls chat choices) |
-| `API_PORT` | API port, default 4000 |
-| `NEXT_PUBLIC_API_URL` | Browser-visible API base URL |
-| `CORS_ORIGIN` | Allowed frontend origin(s), comma-separated |
+## Configure the self-hosted model server
 
-## Important QA security notes
-- The starter uses a fixed QA demo identity (`qa-demo-user`) and is not suitable for internet exposure or real customer data.
-- Do not deploy this build to production until real authentication/JWT guards, per-user authorization, rate limiting, request logging controls, secrets management, abuse controls, and security testing are implemented.
-- Change the sample database password and JWT secret outside local development.
-- The provider key is only read by the backend. Never prefix it with `NEXT_PUBLIC_`.
+Set these variables on the **API service only**:
 
-## Project layout
-```
-apps/
-  api/   NestJS REST API, Prisma schema, chat service
-  web/   Next.js chat interface
-infra/   Reserved for deployment manifests
-```
+| Variable | Purpose | Example |
+|---|---|---|
+| `ORCA_MODEL_BASE_URL` | Private base URL of the self-hosted inference server, including its API prefix | `http://GPU_HOST:8000/v1` |
+| `ORCA_MODEL_NAME` | Model identifier loaded by the inference server | `Qwen/Qwen3-8B` |
+| `ORCA_MODEL_API_KEY` | Optional bearer token if the private gateway requires it | Keep secret |
+
+The API calls `POST {ORCA_MODEL_BASE_URL}/chat/completions`. The inference server must accept a chat-completions JSON body and return `choices[0].message.content`. Do not set this URL to a commercial provider. It must be the ORCA-operated GPU endpoint.
 
 ## Current API
-- `GET /health` — health check
+
+- `GET /health` — API health check
+- `GET /api/chat/models` — reports the configured self-hosted model and whether its endpoint is configured
 - `GET /api/chat/conversations` — list QA user's conversations
 - `GET /api/chat/conversations/:id` — fetch a conversation and messages
-- `POST /api/chat/messages` — send a message; JSON `{ "message": "...", "conversationId": "optional", "model": "gpt-4o-mini" }`
+- `POST /api/chat/messages` — send a message; JSON `{ "message": "...", "conversationId": "optional" }`
 
-The API currently accepts `x-qa-user` as a QA-only identity header. Do not trust this header in a deployed/shared environment.
+The API uses a QA-only demo identity (`x-qa-user`, default `qa-demo-user`). Replace it with verified authentication before public or production exposure.
+
+## Deployment notes
+
+- Keep the existing frontend, API and PostgreSQL services on Render if desired.
+- Do **not** run the language model on the current free Render instance; it does not have sufficient memory or GPU resources.
+- Deploy the inference server on a dedicated GPU host with a private network path to the API.
+- Configure `ORCA_MODEL_BASE_URL` to the GPU server's private endpoint where possible. Do not expose the inference port publicly without authentication, firewall rules and TLS.
+- The API service needs outbound network access to the GPU endpoint. If the GPU host cannot be privately networked with Render, use a secured VPN or private gateway.
+- After configuring the model endpoint, redeploy the API and verify `GET /api/chat/models` returns `configured: true`, then send a chat smoke test.
+
+## QA security notes
+
+- This starter uses a fixed QA demo identity and is not suitable for real customer data or unrestricted public access.
+- Before production, implement real authentication/JWT guards, per-user authorization, rate limiting, request logging controls, secrets management, abuse controls, and security testing.
+- Never commit model gateway tokens or database credentials.
