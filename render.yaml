@@ -5,7 +5,7 @@ services:
     plan: starter
     region: singapore
     rootDir: .
-    buildCommand: cat source.part.* | base64 -d > /tmp/orca-source.zip && unzip -oq /tmp/orca-source.zip -d /tmp/orca-source && cp -a /tmp/orca-source/orca-ai-qa/. . && npm install && npm run db:generate && npm --workspace apps/api run build
+    buildCommand: npm install && npm run db:generate && npm --workspace apps/api run build
     startCommand: npm --workspace apps/api run start
     healthCheckPath: /health
     autoDeploy: false
@@ -33,8 +33,8 @@ services:
     plan: starter
     region: singapore
     rootDir: .
-    buildCommand: cat source.part.* | base64 -d > /tmp/orca-source.zip && unzip -oq /tmp/orca-source.zip -d /tmp/orca-source && cp -a /tmp/orca-source/orca-ai-qa/. . && npm install && npm --workspace apps/web run build
-    startCommand: npm --workspace apps/web run start -- -H 0.0.0.0 -p $PORT
+    buildCommand: npm install && npm --workspace apps/web run build
+    startCommand: npm --workspace apps/web run start -- -p $PORT
     autoDeploy: false
     envVars:
       - key: NODE_ENV

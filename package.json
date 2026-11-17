@@ -1,8 +1,16 @@
 {
-  "name": "@orca-ai/web",
+  "name": "orca-ai-qa",
   "version": "0.1.1",
   "private": true,
-  "scripts": {"dev": "next dev -p 3000", "build": "next build", "start": "next start -p 3000"},
-  "dependencies": {"lucide-react": "^0.468.0", "next": "^14.2.21", "react": "^18.3.1", "react-dom": "^18.3.1"},
-  "devDependencies": {"@types/node": "^22.10.2", "@types/react": "^18.3.18", "@types/react-dom": "^18.3.5", "autoprefixer": "^10.4.20", "postcss": "^8.4.49", "tailwindcss": "^3.4.17", "typescript": "^5.7.2"}
+  "engines": {"node": ">=20"},
+  "workspaces": ["apps/web", "apps/api"],
+  "scripts": {
+    "dev": "concurrently \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:web": "npm --workspace apps/web run dev",
+    "dev:api": "npm --workspace apps/api run start:dev",
+    "build": "npm --workspace apps/api run build && npm --workspace apps/web run build",
+    "db:generate": "npm --workspace apps/api run prisma:generate",
+    "db:migrate": "npm --workspace apps/api run prisma:migrate"
+  },
+  "devDependencies": {"concurrently": "^9.1.2"}
 }
