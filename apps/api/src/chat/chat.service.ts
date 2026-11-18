@@ -15,14 +15,18 @@ export class ChatService {
   }
 
   private get modelName() {
-    return process.env.ORCA_MODEL_NAME?.trim() || 'Qwen/Qwen3-8B';
+    return process.env.ORCA_MODEL_NAME?.trim() || 'qwen/qwen3.8-27b';
+  }
+
+  private get modelApiKey() {
+    return process.env.ORCA_MODEL_API_KEY?.trim() || '';
   }
 
   getModelStatus() {
     return {
-      provider: 'self-hosted',
+      provider: 'GroqCloud',
       model: this.modelName,
-      configured: Boolean(this.modelBaseUrl),
+      configured: Boolean(this.modelBaseUrl && this.modelApiKey),
     };
   }
 
@@ -37,8 +41,8 @@ export class ChatService {
   }
 
   async send(userId: string, input: { message: string; conversationId?: string; model?: string }) {
-    if (!this.modelBaseUrl) {
-      throw new ServiceUnavailableException('ORCA Model Engine is not connected yet. Deploy the dedicated GPU inference server and configure ORCA_MODEL_BASE_URL.');
+    if (!this.modelBaseUrl || !this.modelApiKey) {
+      throw new ServiceUnavailableException('ORCA AI inference is not configured. Check ORCA_MODEL_BASE_URL and ORCA_MODEL_API_KEY.');
     }
 
     // Ensure the QA demo identity exists before creating a conversation (User is a required FK).
@@ -60,10 +64,10 @@ export class ChatService {
 
     try {
       const endpoint = `${this.modelBaseUrl}/chat/completions`;
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (process.env.ORCA_MODEL_API_KEY) {
-        headers.Authorization = `Bearer ${process.env.ORCA_MODEL_API_KEY}`;
-      }
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.modelApiKey}`,
+      };
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -72,7 +76,10 @@ export class ChatService {
         body: JSON.stringify({
           model: this.modelName,
           messages: [
-            { role: 'system', content: 'You are ORCA AI, a helpful, accurate and professional AI assistant. If uncertain, say so. Do not claim to have performed actions you have not performed.' },
+            {
+              role: 'system',
+              content: `You are ORCA AI, a helpful, accurate and professional AI assistant. Your configured inference provider is GroqCloud and your configured model ID is ${this.modelName}. If asked which provider or model is configured for this ORCA AI deployment, state those values. Do not claim to know private infrastructure details beyond this configuration. If uncertain about any other fact, say so. Do not claim to have performed actions you have not performed.`
+            },
             ...history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
           ],
           temperature: 0.7,
@@ -82,7 +89,7 @@ export class ChatService {
 
       if (!response.ok) {
         const detail = (await response.text()).slice(0, 500);
-        throw new BadGatewayException(`ORCA Model Engine returned HTTP ${response.status}: ${detail || response.statusText}`);
+        throw new BadGatewayException(`GroqCloud inference returned HTTP ${response.status}: ${detail || response.statusText}`);
       }
 
       const result = await response.json() as ModelChatResponse;
@@ -92,7 +99,7 @@ export class ChatService {
         : Array.isArray(rawContent)
           ? rawContent.map((part) => part.text || '').join('')
           : '';
-      if (!answer) throw new BadGatewayException('ORCA Model Engine returned an empty response.');
+      if (!answer) throw new BadGatewayException('GroqCloud returned an empty response.');
 
       await this.prisma.message.create({ data: { conversationId: conversation.id, role: 'assistant', content: answer } });
       await this.prisma.conversation.update({ where: { id: conversation.id }, data: { model: this.modelName } });
@@ -100,8 +107,8 @@ export class ChatService {
     } catch (error) {
       if (error instanceof BadGatewayException || error instanceof ServiceUnavailableException) throw error;
       const message = error instanceof Error && error.name === 'TimeoutError'
-        ? 'ORCA Model Engine timed out. Check GPU server health and model loading.'
-        : 'Could not connect to ORCA Model Engine. Check ORCA_MODEL_BASE_URL and the GPU server network access.';
+        ? 'GroqCloud inference timed out. Please retry shortly.'
+        : 'Could not connect to GroqCloud inference. Check the endpoint and API key configuration.';
       throw new ServiceUnavailableException(message);
     }
   }
